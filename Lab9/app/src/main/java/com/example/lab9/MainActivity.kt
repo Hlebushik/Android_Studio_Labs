@@ -1,47 +1,85 @@
 package com.example.lab9
 
 import android.os.Bundle
-import androidx.activity.ComponentActivity
-import androidx.activity.compose.setContent
-import androidx.activity.enableEdgeToEdge
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.padding
-import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Text
-import androidx.compose.runtime.Composable
-import androidx.compose.ui.Modifier
-import androidx.compose.ui.tooling.preview.Preview
-import com.example.lab9.ui.theme.Lab9Theme
+import android.widget.Toast
+import androidx.appcompat.app.AppCompatActivity
+import androidx.lifecycle.lifecycleScope
+import androidx.room.Room
+import com.example.lab9.databinding.ActivityMainBinding
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.GlobalScope
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
-class MainActivity : ComponentActivity() {
+class MainActivity : AppCompatActivity() {
+    private lateinit var binding: ActivityMainBinding
+    companion object {
+        lateinit var database: ContactsDB
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        enableEdgeToEdge()
-        setContent {
-            Lab9Theme {
-                Scaffold(modifier = Modifier.fillMaxSize()) { innerPadding ->
-                    Greeting(
-                        name = "Android",
-                        modifier = Modifier.padding(innerPadding)
-                    )
+        binding = ActivityMainBinding.inflate(layoutInflater)
+        setContentView(binding.root)
+
+        database = Room.databaseBuilder(
+            applicationContext,
+            ContactsDB::class.java, "contact_database"
+        ).build()
+        val contactDao = database.contactDao()
+
+        binding.addContactButton.setOnClickListener{
+            val name = binding.nameEdit.text.toString()
+            val phone = binding.phoneEdit.text.toString()
+            val email = binding.emailEdit.text.toString()
+            val contact = Contact(name = name, phone = phone, email = email)
+            GlobalScope.launch {
+                contactDao.insertAll(contact)
+            }
+
+            Toast.makeText(
+                applicationContext,
+                "Користувача успішно додано",
+                Toast.LENGTH_LONG
+            ).show()
+        }
+
+        binding.allContactsButton.setOnClickListener{
+            GlobalScope.launch {
+                val contacts = contactDao.getAll()
+                var contactsInfo = ""
+                contacts.forEach{
+                    contactsInfo += "${it.name} ${it.phone} ${it.email}\n"
+                }
+                runOnUiThread{
+                    binding.textView.text = contactsInfo
+                }
+            }
+        }
+
+        binding.deleteButton.setOnClickListener{
+            val index = binding.idEdit.text.toString().toIntOrNull()
+
+            if (index == null || index < 0) {
+                Toast.makeText(this, "Невірний індекс", Toast.LENGTH_SHORT).show()
+                return@setOnClickListener
+            }
+
+            lifecycleScope.launch(Dispatchers.IO) {
+                val contacts = contactDao.getAll()
+                if (contacts.isNotEmpty() && index < contacts.size) {
+                    val contactToDelete = contacts[index]
+                    contactDao.deleteById(contactToDelete.id)
+                    withContext(Dispatchers.Main) {
+                        Toast.makeText(this@MainActivity, "Контакт успішно видалено", Toast.LENGTH_SHORT).show()
+                    }
+                } else {
+                    withContext(Dispatchers.Main) {
+                        Toast.makeText(this@MainActivity, "Невірний індекс", Toast.LENGTH_SHORT).show()
+                    }
                 }
             }
         }
     }
 }
 
-@Composable
-fun Greeting(name: String, modifier: Modifier = Modifier) {
-    Text(
-        text = "Hello $name!",
-        modifier = modifier
-    )
-}
-
-@Preview(showBackground = true)
-@Composable
-fun GreetingPreview() {
-    Lab9Theme {
-        Greeting("Android")
-    }
-}
